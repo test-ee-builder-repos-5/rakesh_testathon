@@ -14,7 +14,6 @@
 #   ANSIBLE_GALAXY_SERVER_PRIVATE_HUB_VALIDATED_TOKEN
 #   ANSIBLE_GALAXY_SERVER_PRIVATE_HUB_PUBLISHED_TOKEN
 #   ANSIBLE_GALAXY_SERVER_PRIVATE_HUB_RH_CERTIFIED_TOKEN
-#   AAP_EE_BUILDER_GITHUB_GITHUB_PUBLIC_TEST_RHAAP_PORTAL_3_TOKEN
 #   REGISTRY_USERNAME, REGISTRY_PASSWORD   - Container registry credentials
 #   REDHAT_REGISTRY_PASSWORD     - Red Hat registry for base images
 #
@@ -38,12 +37,12 @@ on:
       ee_dir:
         description: "Directory containing the EE files (relative to repo root)"
         required: false
-        default: "eee"
+        default: "1534-raks"
         type: string
       ee_file_name:
         description: "EE definition file name"
         required: false
-        default: "eee.yml"
+        default: "1534-raks.yml"
         type: string
       ee_registry:
         description: "Container registry"
@@ -90,7 +89,7 @@ env:
   EE_REGISTRY_TLS_VERIFY: ${{ inputs.registry_tls_verify || vars.EE_REGISTRY_TLS_VERIFY || 'false' }}
   # EE directory and file name (override via workflow_dispatch inputs or repository Variables)
   EE_DIR: ${{ inputs.ee_dir || vars.EE_DIR || '.' }}
-  EE_FILE_NAME: ${{ inputs.ee_file_name || vars.EE_FILE_NAME || 'eee.yml' }}
+  EE_FILE_NAME: ${{ inputs.ee_file_name || vars.EE_FILE_NAME || '1534-raks.yml' }}
   # Image build tag (override via workflow_dispatch input or repository Variable)
   IMAGE_BUILD_TAG: ${{ inputs.image_build_tag || vars.IMAGE_BUILD_TAG || format('build-{0}', github.sha) }}
   # Base image age thresholds (in days) - annotations only, never blocks the build
@@ -138,21 +137,11 @@ jobs:
           fi
           echo "configured=$CONFIGURED" >> "$GITHUB_OUTPUT"
 
-      - name: Check if SCM tokens are configured
+      - name: No SCM tokens required
         id: check-git-token
-        env:
-
-          AAP_EE_BUILDER_GITHUB_GITHUB_PUBLIC_TEST_RHAAP_PORTAL_3_TOKEN: ${{ secrets.AAP_EE_BUILDER_GITHUB_GITHUB_PUBLIC_TEST_RHAAP_PORTAL_3_TOKEN }}
         run: |
-          CONFIGURED=false
-
-          if [[ -n "$AAP_EE_BUILDER_GITHUB_GITHUB_PUBLIC_TEST_RHAAP_PORTAL_3_TOKEN" ]]; then
-            echo "::notice::AAP_EE_BUILDER_GITHUB_GITHUB_PUBLIC_TEST_RHAAP_PORTAL_3_TOKEN is configured"
-            CONFIGURED=true
-          else
-            echo "::notice::No AAP_EE_BUILDER_GITHUB_GITHUB_PUBLIC_TEST_RHAAP_PORTAL_3_TOKEN secret configured"
-          fi
-          echo "configured=$CONFIGURED" >> "$GITHUB_OUTPUT"
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+          echo "::notice::No SCM tokens configured for this project"
 
 
   validate-image-tag:
@@ -333,7 +322,6 @@ jobs:
           ANSIBLE_GALAXY_SERVER_PRIVATE_HUB_VALIDATED_TOKEN: ${{ secrets.ANSIBLE_GALAXY_SERVER_PRIVATE_HUB_VALIDATED_TOKEN }}
           ANSIBLE_GALAXY_SERVER_PRIVATE_HUB_PUBLISHED_TOKEN: ${{ secrets.ANSIBLE_GALAXY_SERVER_PRIVATE_HUB_PUBLISHED_TOKEN }}
           ANSIBLE_GALAXY_SERVER_PRIVATE_HUB_RH_CERTIFIED_TOKEN: ${{ secrets.ANSIBLE_GALAXY_SERVER_PRIVATE_HUB_RH_CERTIFIED_TOKEN }}
-          AAP_EE_BUILDER_GITHUB_GITHUB_PUBLIC_TEST_RHAAP_PORTAL_3_TOKEN: ${{ secrets.AAP_EE_BUILDER_GITHUB_GITHUB_PUBLIC_TEST_RHAAP_PORTAL_3_TOKEN }}
           # Use the repo's ansible.cfg for host-side dependency resolution
           ANSIBLE_CONFIG: ./ansible.cfg
         run: |
@@ -341,25 +329,6 @@ jobs:
           echo "::notice::EE directory: ${{ env.EE_DIR }}"
           ansible-builder create --file "${{ env.EE_DIR }}/${{ env.EE_FILE_NAME }}" --output-filename Containerfile
 
-
-          # Post-process: resolve SCM token references in the generated
-          # requirements file. Tokens are embedded in collection Git URLs
-          # (e.g. https://${TOKEN}@github.com/org/repo). The multi-stage build
-          # ensures resolved URLs only exist in intermediate stages, never in
-          # the final image.
-          if ! command -v envsubst >/dev/null 2>&1; then
-            echo "::error::envsubst not found on runner; required for SCM token substitution. Install gettext-base (or equivalent)."
-            exit 1
-          fi
-          if [[ -f context/_build/requirements.yml ]]; then
-            envsubst '$AAP_EE_BUILDER_GITHUB_GITHUB_PUBLIC_TEST_RHAAP_PORTAL_3_TOKEN' \
-              < context/_build/requirements.yml > /tmp/req-resolved.yml
-            cp /tmp/req-resolved.yml context/_build/requirements.yml
-          else
-            echo "::error::SCM token variables are configured but context/_build/requirements.yml was not found after ansible-builder create."
-            echo "SCM token variables expected for substitution: AAP_EE_BUILDER_GITHUB_GITHUB_PUBLIC_TEST_RHAAP_PORTAL_3_TOKEN"
-            exit 1
-          fi
 
           echo "::endgroup::"
 
